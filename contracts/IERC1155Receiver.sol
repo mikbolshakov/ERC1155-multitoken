@@ -3,7 +3,7 @@ pragma solidity ^0.8.0;
 
 import "./IERC165.sol";
 
-// интерфейс для перевода токенов
+// интерфейс для проверки, может ли ск принять токены
 interface IERC1155Receiver is IERC165 {
     function onERC1155Received(
         address operator,
@@ -13,7 +13,6 @@ interface IERC1155Receiver is IERC165 {
         bytes calldata data
     ) external returns(bytes4);
 
-    // перевод сразу множества токенов (batch)
     function onERC1155BatchReceived(
         address operator,
         address from,

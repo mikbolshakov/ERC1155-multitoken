@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-// например для временной приостановки всех переводов
+// контракт например для временной приостановки всех переводов
 abstract contract Pausable {
     bool private _paused;
 
@@ -40,7 +40,7 @@ abstract contract Pausable {
     }
 
     function _unpause() internal virtual whenPaused {
-        _paused = true;
+        _paused = false;
         emit Unpaused(msg.sender);
     }
 }

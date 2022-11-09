@@ -6,8 +6,10 @@ import "./IERC1155.sol";
 import "./IERC1155Receiver.sol";
 import "./IERC1155MetadataURI.sol";
 
+// в ERC1155 большое внимание уделяется id токенов: если только один токен под одним id, то этот токен невзаимозаменяемый,
+// если под одним id много токенов, значит все они взаимозаменяемые 
 contract ERC1155 is ERC165, IERC1155, IERC1155MetadataURI {
-    mapping(uint => mapping(address => uint256)) private _balances; // тип токена => адрес владельца => количество этих токенов на этом адресе
+    mapping(uint => mapping(address => uint256)) private _balances; // id токена => адрес владельца => количество этих токенов на этом адресе
     mapping(address => mapping(address => bool)) private _operatorApprovals; // адрес владельца => адрес оператора => может/не может оператор распоряжаться токенами владельца
     string private _uri;
 
@@ -27,11 +29,13 @@ contract ERC1155 is ERC165, IERC1155, IERC1155MetadataURI {
         return _uri;
     }
 
+    // передаем id токена, так как может быть много разных токенов
     function balanceOf(address account, uint id) public view virtual returns(uint) {
         require(account != address(0), "ERC1155: address zero is not a valid owner");
         return _balances[id][account];
     }
 
+    // за один вызов функции запрашиваем балансы нескольких аккаунтов
     function balanceOfBatch(address[] memory accounts, uint[] memory ids) public view virtual returns (uint[] memory) {
         require(accounts.length == ids.length, "ERC1155: accounts and ids length mismatch");
         uint[] memory batchBalances = new uint[](accounts.length);
@@ -41,10 +45,12 @@ contract ERC1155 is ERC165, IERC1155, IERC1155MetadataURI {
         return batchBalances;
     }
 
+    // даем права на управление токенами
     function setApprovalForAll(address operator, bool approved) public virtual {
         _setApprovalForAll(msg.sender, operator, approved);
     }
 
+    // проверяем возможность управления токенами
     function isApprovedForAll(address account, address operator) public view virtual returns(bool) {
         return _operatorApprovals[account][operator];
     }
@@ -54,6 +60,7 @@ contract ERC1155 is ERC165, IERC1155, IERC1155MetadataURI {
         _safeTransferFrom(from, to, id, amount, data);
     }
 
+    // возможность множественного перевода сразу множества типов токенов за одну транзакцию (экономит газ)
     function safeBatchTransferFrom(address from, address to, uint[] memory ids, uint[] memory amounts, bytes memory data) public virtual {
         require(from == msg.sender || isApprovedForAll(from, msg.sender), "ERC1155: caller is not token owner or approved");
         _safeBatchTransferFrom(from, to, ids, amounts, data);
@@ -62,13 +69,13 @@ contract ERC1155 is ERC165, IERC1155, IERC1155MetadataURI {
     function _safeTransferFrom(address from, address to, uint id, uint amount, bytes memory data) internal virtual {
         require(to != address(0), "ERC1155: transfer to the zero address");
         address operator = msg.sender;
-        uint[] memory ids = _asSingletonArray(id);
-        uint[] memory amounts = _asSingletonArray(amount);
+        uint[] memory ids = _asSingletonArray(id); // в этой функции во входных данных uint, а в функциях Batch - массив, поэтому 
+        uint[] memory amounts = _asSingletonArray(amount); // создаем массив из одного числа для единообразия(например _beforeTokenTransfer принимает массивы)
         _beforeTokenTransfer(operator, from, to, ids, amounts, data);
-        uint fromBalance = _balances[id][from];
+        uint fromBalance = _balances[id][from]; // проверяем баланс, чтобы было нужное кол-во токенов
         require(fromBalance >= amount, "ERC1155: insufficient balance for transfer");
-        _balances[id][from] = fromBalance - amount;
-        _balances[id][to] += amount;
+        _balances[id][from] = fromBalance - amount; // уменьшаем баланс отправителя
+        _balances[id][to] += amount;                // увеличииваем баланс получателя
         emit TransferSingle(operator, from, to, id, amount);
         _afterTokenTransfer(operator, from, to, ids, amounts, data);
         _doSafeTransferAcceptanceCheck(operator, from, to, id, amount, data);
@@ -79,7 +86,7 @@ contract ERC1155 is ERC165, IERC1155, IERC1155MetadataURI {
         require(to != address(0), "ERC1155: transfer to the zero address");
         address operator = msg.sender;
         _beforeTokenTransfer(operator, from, to, ids, amounts, data);
-        for (uint i = 0; i < ids.length; ++i) {
+        for(uint i = 0; i < ids.length; ++i) {
             uint id = ids[i];
             uint amount = amounts[i];
             uint fromBalance = _balances[id][from];
@@ -108,15 +115,15 @@ contract ERC1155 is ERC165, IERC1155, IERC1155MetadataURI {
 
 	// проверяем, готов ли получатель принять токены
 	function _doSafeTransferAcceptanceCheck(address operator, address from, address to, uint id, uint amount, bytes memory data) private {
-        if (to.code.length > 0) {
+        if (to.code.length > 0) { // проверка, является ли получатель смарт контрактом. Обычный аккаунт может принимать токены
             try IERC1155Receiver(to).onERC1155Received(operator, from, id, amount, data) returns(bytes4 response) {
-                if (response != IERC1155Receiver.onERC1155Received.selector) {
+                if (response != IERC1155Receiver.onERC1155Received.selector) { // onERC1155Received должна возвращать определенный селектор
                     revert("ERC1155: ERC1155Receiver rejected tokens");
                 }
             } catch Error(string memory reason) {
-                revert(reason);
+                revert(reason); // если в ск есть функция onERC1155Received, но в ней ошибка - возвращаем reason
             } catch {
-                revert("ERC1155: transfer to non-ERC1155Receiver implementer");
+                revert("ERC1155: transfer to non-ERC1155Receiver implementer"); // если просто нет этой функции - возвращаем наше сообщение
             }
         }
     }
@@ -128,19 +135,20 @@ contract ERC1155 is ERC165, IERC1155, IERC1155MetadataURI {
                     revert("ERC1155: ERC1155Receiver rejected tokens");
                 }
             } catch Error(string memory reason) {
-                revert(reason);
+                revert(reason); 
             } catch {
                 revert("ERC1155: transfer to non-ERC1155Receiver implementer");
             }
         }
     }
 
-	function _asSingletonArray(uint element) private pure returns(uint[] memory) {
-        uint[] memory result = new uint[](1);
+    // функция конвертирует одно число в массив из одного числа
+	function _asSingletonArray(uint element) private pure returns(uint[] memory result) {
+        result = new uint[](1);
         result[0] = element;
-        return result;
     }
 
+    // ниже дополнительные функции, не входящие в базовую реализацию ERC1155 
     function _mint(address to, uint id, uint amount, bytes memory data) internal virtual {
         require(to != address(0), "ERC1155: mint to the zero address");
         address operator = msg.sender;
